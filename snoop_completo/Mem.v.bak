@@ -1,0 +1,33 @@
+module memory(BarramentoEntrada,Clock,BarramentoSaida);
+		
+		input [10:0]BarramentoEntrada;
+		input Clock;
+		output reg [10:0]BarramentoSaida;
+		//Mensagens do Barramento
+		parameter readMissMsg = 2'b01;
+		parameter invalidate = 2'b10;
+		parameter mensagemRetorno = 2'b11;
+		
+		reg [3:0]Memoria[1:0];
+		
+		initial begin
+			Memoria[0] = 4'b0101;
+			Memoria[1] = 4'b1010;
+		end
+		
+		always @(posedge Clock) begin
+			BarramentoSaida = 11'b00000000000;
+			if(BarramentoEntrada[5:4] == readMissMsg) begin
+				BarramentoSaida[10] = 0;
+				BarramentoSaida[9:8] = BarramentoEntrada[9:8];
+				BarramentoSaida[5:4] = mensagemRetorno;
+				BarramentoSaida[3] = BarramentoEntrada[3];
+				if(BarramentoEntrada[3] == 0) begin
+					BarramentoSaida[2:0] = Memoria[0][2:0];
+				end
+				else begin 
+					BarramentoSaida[2:0]	= Memoria[1][2:0];
+				end
+			end
+		end
+endmodule

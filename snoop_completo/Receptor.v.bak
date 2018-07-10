@@ -1,0 +1,55 @@
+module Receptor (vemBUS,receptorBus,estado,proximoEstadoReceptor,writeback,);
+	input vemBUS;
+	input [1:0]receptorBus;
+	input [1:0]estado; 
+	output reg [1:0]proximoEstadoReceptor; 
+	output reg writeback;
+	
+	parameter  modified  = 2'b11;
+	parameter  exclusive = 2'b10;
+	parameter  shared    = 2'b01;
+	parameter  invalid	= 2'b00;
+	parameter  read		= 1'b0;
+	parameter  write		= 1'b1;
+	parameter  readMiss	 = 2'b01;
+	parameter  writeMiss	 = 2'b10;
+	parameter  invalidate = 2'b11;
+	
+	always @(receptorBus) begin
+		if(vemBUS) begin
+			writeback = 0;
+			case(estado) 	 
+				//Modified
+				modified: begin
+					if(receptorBus == writeMiss) begin
+						proximoEstadoReceptor = invalid;
+						writeback = 1;
+						end
+					else if (receptorBus == readMiss) begin
+						proximoEstadoReceptor = shared;
+						writeback = 1;
+						end
+				end
+				//Exclusive
+				exclusive: begin
+					if(receptorBus == writeMiss || receptorBus == invalidate) begin
+						proximoEstadoReceptor = invalid;
+					end
+					else if (receptorBus == readMiss)begin
+						proximoEstadoReceptor = shared;
+					end
+				end
+				//Shared
+				shared: begin 
+					if(receptorBus == writeMiss || receptorBus == invalidate) begin
+						proximoEstadoReceptor = invalid;
+					end
+				end
+				//Invalid
+				invalid: begin 
+					proximoEstadoReceptor = invalid;
+				end
+			endcase
+		 end
+		end
+endmodule

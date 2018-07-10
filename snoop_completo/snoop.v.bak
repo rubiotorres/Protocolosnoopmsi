@@ -1,0 +1,129 @@
+module Snoop (Instrucao,Clock);
+	
+	input Clock;
+	input [6:0]Instrucao;
+	
+	wire [10:0]barramento1; 
+	wire [10:0]barramento2;
+	wire [10:0]barramento3;
+	wire [10:0]BusMem;
+	wire [10:0]BusWire;
+	
+	processor p1(Instrucao,BusWire,Clock,2'b01,barramento1);
+	processor p2(Instrucao,BusWire,Clock,2'b10,barramento2);
+	processor p3(Instrucao,BusWire,Clock,2'b11,barramento3);
+	memory	 m1(BusWire,Clock,BusMem);
+	bus		 b1(barramento1,barramento2,barramento3,BusMem,Clock,BusWire);
+
+endmodule
+
+module processor (Instrucao,BarramentoEntrada,Clock,CodigoProcessador,BarramentoSaida);
+		input [6:0]Instrucao;
+		input Clock;
+		input [1:0]CodigoProcessador;
+		input [10:0]BarramentoEntrada;
+		output reg [10:0]BarramentoSaida;
+		
+		reg [5:0]Cache = 6'b000000;
+		reg writeback;	//Guarda a informação se vai ter o Writeback ou não
+		reg vemBUS;		//Dispara requisição para máquina receptora
+		reg vemCPU;		//Dispara requisição para máquina emissora
+		reg [2:0]requisicao;	
+		
+		wire [1:0]estado;
+		
+		parameter modified = 2'b11;
+		parameter exclusive = 2'b10;
+		parameter shared  = 2'b01;
+		parameter invalid = 2'b00;
+		
+		parameter read  = 1'b0; 
+		parameter write = 1'b1;
+		
+		parameter readMissMsg = 2'b01;
+		parameter invalidate = 2'b10;
+		parameter mensagemRetorno = 2'b11;
+		
+		always @(posedge Clock) begin
+			vemBUS = 0;
+			vemCPU = 0;
+			BarramentoSaida = 11'b00000000000;
+			Cache[5:4] = estado;
+			if(Instrucao[6:5] == CodigoProcessador) begin
+				vemCPU = 1;
+				requisicao[2] = Instrucao[4];	//Seta o Opcode da instrução para a requisição
+				requisicao[0] = 0;
+				if(Instrucao[4] == read && Instrucao[3] == Cache[3] && Cache[5:4] != invalid) begin
+					//Read Hit
+					BarramentoSaida[3] = Cache[3];
+					BarramentoSaida[2:0] = Cache[2:0];
+					requisicao[1] = 1;
+				end
+				else if(Instrucao[4] == read) begin
+					//Read Miss
+					BarramentoSaida[9:8] = CodigoProcessador;
+					BarramentoSaida[5:4] = readMissMsg;
+					BarramentoSaida[3] = Instrucao[3];
+					vemCPU = 0;
+					if(Cache[5:4] == modified) begin
+						BarramentoSaida[6] = Cache[3];
+						BarramentoSaida[7] = 1;
+						BarramentoSaida[2:0] = Cache[2:0];
+					end
+				end
+				else if(Instrucao[4] == write && Instrucao[3] == Cache[3] && Cache[5:4] != invalid) begin 
+				// Write Hit
+					Cache[2:0] = Instrucao[2:0];
+					requisicao[1] = 1;
+					if(Cache[5:4] == shared) begin
+						BarramentoSaida[9:8] = CodigoProcessador;
+						BarramentoSaida[5:4] = invalidate;
+						BarramentoSaida[3] = Cache[3];
+					end
+				end
+				else if(Instrucao[4] == write) begin 
+					// Write Miss
+					if(Cache[5:4] == modified) begin // Write miss em estado modified gera um writeback
+						BarramentoSaida[7] = 1;
+						BarramentoSaida[6] = Cache[3];
+						BarramentoSaida[2:0] = Cache[2:0];
+					end
+					// Envia invalidate
+					requisicao[1] = 0;
+					BarramentoSaida[9:8] = CodigoProcessador;
+					BarramentoSaida[5:4] = invalidate;
+					BarramentoSaida[3] = Instrucao[3];
+					// Escreve valor na cache
+					Cache[3] = Instrucao[3];
+					Cache[2:0] = Instrucao[2:0];
+				end
+			end
+			else if(BarramentoEntrada[5:4]!= 2'b00) begin
+				if(BarramentoEntrada[5:4] == invalidate && BarramentoEntrada[3] == Cache[3] && BarramentoEntrada[9:8] != CodigoProcessador) begin
+					Cache[5:4] = invalid;
+				end
+				else if(BarramentoEntrada[5:4] == readMissMsg && BarramentoEntrada[3] == Cache[3] && Cache[5:4] != invalid) begin
+					if(Cache[5:4] == modified) begin
+						BarramentoSaida[7] = 1;
+						BarramentoSaida[6] = Cache[3];
+					end
+						BarramentoSaida[10] = 1;
+						BarramentoSaida[9:8] = BarramentoEntrada[9:8];
+						BarramentoSaida[5:4] = mensagemRetorno;
+						BarramentoSaida[3] = Cache[3];
+						BarramentoSaida[2:0] = Cache[2:0];
+						Cache[5:4] = shared;
+			   end
+				else if(BarramentoEntrada[5:4] == mensagemRetorno && BarramentoSaida[9:8] == CodigoProcessador) begin
+					//
+					if(BarramentoSaida[10] == 1) begin
+						Cache[5:4] = shared;
+					end
+					else begin
+						Cache[5:4] = exclusive;
+					end
+					Cache[3] = BarramentoEntrada[3];
+					Cache[2:0] = BarramentoEntrada[2:0];
+				end
+			end
+		end

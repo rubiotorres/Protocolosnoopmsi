@@ -1,0 +1,18 @@
+module snoopinstance (Inst,clk);
+	
+	input clk;
+	input [6:0]Inst;
+	wire [10:0]b1; 
+	wire [10:0]b2;
+	wire [10:0]b3;
+	wire [10:0]mem_bus;
+	wire [10:0]bus_wire;
+	
+	processador p1(Inst,bus_wire,clk,2'b01,b1);
+	processador p2(Inst,bus_wire,clk,2'b10,b2);
+	processador p3(Inst,bus_wire,clk,2'b11,b3);
+	memory m1(bus_wire,Clock,mem_bus);
+	bus b1(b1,b2,b3,mem_bus,clk,bus_wire);
+
+endmodule
+

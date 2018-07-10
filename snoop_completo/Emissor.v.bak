@@ -1,0 +1,79 @@
+module Emissor (vemCPU,estado,operacao,estadoOperacao,estadoCompartilhado,Clock,proximoEstado);
+	/*
+		Considerações:
+			- Escolher foi trocado por vemCPU,funciona como se fosse um sinal de controle, para determinar, se veio
+			da CPU, é feito pelos processadores primeiro e a alteração no Emissor, faz com que o Receptor seja ativado
+	*/
+	input vemCPU,operacao,estadoOperacao,estadoCompartilhado;
+	input [1:0]estado;
+	input Clock;
+	output reg [1:0]proximoEstado;
+	parameter  modified  = 2'b11;
+	parameter  exclusive = 2'b10;
+	parameter  shared    = 2'b01;
+	parameter  invalid	= 2'b00;
+	parameter  read		= 1'b0;
+	parameter  write		= 1'b1;
+	parameter  readMiss	 = 2'b01;
+	parameter  writeMiss	 = 2'b10;
+	parameter  invalidate = 2'b11;
+	
+	initial proximoEstado = invalid;
+	
+	always @(negedge Clock) begin
+		   proximoEstado = estado;
+			if(vemCPU) begin
+			case(estado)
+				//Modified
+				modified: begin
+					if(estadoOperacao == 1) begin
+						//Se toda operação for de acerto, continua no estado modificado
+						proximoEstado = modified;
+					end
+				end
+				//Exclusive
+				exclusive: begin
+					if(operacao == read && estadoOperacao == 1) begin
+						//Read Hit
+						proximoEstado = exclusive;
+					end
+					else if(operacao == write && estadoOperacao == 1) begin
+						//Write Hit
+						proximoEstado = modified;
+					end
+					else if(operacao == write && estadoOperacao == 0) begin
+						//Write Miss
+						proximoEstado = modified;
+					end
+				end
+				//Shared
+				shared: begin
+					if(operacao == read && estadoOperacao == 1) begin
+						//Read Hit
+						proximoEstado = shared;
+					end
+					else if(operacao == write && estadoOperacao == 1) begin
+						//Write Hit
+						proximoEstado = modified;
+					end
+					else if(operacao == write && estadoOperacao == 0) begin
+						//WriteMiss
+						proximoEstado = modified;
+					end
+				end
+				//Invalid
+				invalid: begin
+					if(operacao == read && estadoCompartilhado == 0) begin
+						proximoEstado = exclusive;
+					end
+					else if(operacao == read && estadoCompartilhado == 1) begin
+						proximoEstado = shared;
+					end
+					else if(operacao == write) begin
+						proximoEstado = modified;
+					end
+				end
+			endcase
+		end
+	end
+endmodule
